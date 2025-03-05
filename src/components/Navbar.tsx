@@ -4,9 +4,12 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Brain, Trophy, BookOpen, Settings } from 'lucide-react';
+import { SignOutButton, useUser } from "@clerk/clerk-react";
+
 
 const Navbar = () => {
   const location = useLocation();
+  const { user } = useUser();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -52,6 +55,13 @@ const Navbar = () => {
           ))}
         </nav>
         
+        {user && (  // Show logout only when user is signed in
+        <SignOutButton>
+          <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+            Logout
+          </button>
+        </SignOutButton>
+      )}
         <div className="flex items-center gap-2">
           <ModeToggle />
           <Button variant="outline" size="sm" className="md:hidden">
