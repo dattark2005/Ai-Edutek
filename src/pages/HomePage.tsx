@@ -313,3 +313,4 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
 };
 
 export default HomePage;
+
