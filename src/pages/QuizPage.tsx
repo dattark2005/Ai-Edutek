@@ -10,19 +10,10 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/firebase'; // Import Firebase configuration
-import { doc, setDoc } from 'firebase/firestore'; // Firestore functions
-import { collection, query, where, getDocs } from 'firebase/firestore'; // Firestore functions
+import { doc, setDoc, getDoc } from 'firebase/firestore'; // Firestore functions
 
 const API_URL = 'https://quizapi.io/api/v1/questions';
 const API_KEY = 'E0ncEEJKUx9OB83tgUAWh0czgsba2QqYhaWdxJL5';
-
-// List of available categories
-const CATEGORIES = [
-  'Linux',
-  'DevOps',
-  'Docker',
-  'SQL',
-];
 
 interface QuizQuestion {
   id: number;
@@ -56,6 +47,25 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
   const [score, setScore] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [quizStarted, setQuizStarted] = useState<boolean>(false);
+  const [userCourses, setUserCourses] = useState<string[]>([]);
+
+  // Fetch user's selected courses from Firebase on component mount
+  useEffect(() => {
+    const fetchUserCourses = async () => {
+      if (user) {
+        const userId = user.id;
+        const userDocRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserCourses(userData.courses.map((course: { name: string }) => course.name));
+        }
+      }
+    };
+
+    fetchUserCourses();
+  }, [user]);
 
   // Fetch quiz questions based on the selected category
   const fetchQuiz = async (category: string) => {
@@ -162,18 +172,6 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
     }
   }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete, user]);
 
-  const fetchQuizResults = async (userId: string) => {
-    try {
-      const q = query(collection(db, 'quizResults'), where('userId', '==', userId));
-      const querySnapshot = await getDocs(q);
-      const results = querySnapshot.docs.map((doc) => doc.data());
-      return results;
-    } catch (error) {
-      console.error("Error fetching quiz results:", error);
-      return [];
-    }
-  };
-
   const handlePreviousQuestion = () => {
     if (currentQuestion > 0) {
       setCurrentQuestion((prev) => prev - 1);
@@ -209,9 +207,9 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
                 <SelectValue placeholder="Select a category" />
               </SelectTrigger>
               <SelectContent>
-                {CATEGORIES.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
+                {userCourses.map((course) => (
+                  <SelectItem key={course} value={course}>
+                    {course}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -332,5 +330,4 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
     </div>
   );
 };
-
 export default QuizPage;

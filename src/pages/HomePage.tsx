@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,6 +22,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { db } from '@/firebase'; // Import Firebase configuration
+import { doc, setDoc, getDoc } from 'firebase/firestore'; // Firestore functions
 
 interface HomePageProps {
   onStartQuiz: () => void;
@@ -29,12 +32,43 @@ interface HomePageProps {
 
 const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
   const navigate = useNavigate();
+  const { user } = useUser();
   const [isHovering, setIsHovering] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<string>('');
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [courses, setCourses] = useState<{ name: string; ranking: number }[]>([]);
+  const [courseToRemove, setCourseToRemove] = useState<string | null>(null); // Track the course to remove
+  const [showNoCoursePopup, setShowNoCoursePopup] = useState(false); // State for the "No Course Selected" popup
+
+  // List of all available courses
+  const allCourses = ['Linux', 'DevOps', 'Docker', 'SQL'];
+
+  // Fetch user's selected courses from Firebase on component mount
+  useEffect(() => {
+    const fetchCourses = async () => {
+      if (user) {
+        const userId = user.id;
+        const userDocRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setCourses(userData.courses || []);
+        }
+      }
+    };
+
+    fetchCourses();
+  }, [user]);
 
   const handleStartQuiz = () => {
+    // Check if no courses are selected
+    if (courses.length === 0) {
+      setShowNoCoursePopup(true); // Show the "No Course Selected" popup
+      return;
+    }
+
+    // If at least one course is selected, proceed to the quiz
     onStartQuiz();
     navigate('/quiz');
   };
@@ -43,17 +77,46 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
     setSelectedCourse(value);
   };
 
-  const handleConfirmCourse = () => {
-    if (selectedCourse) {
+  const handleConfirmCourse = async () => {
+    if (selectedCourse && user) {
       const newCourse = {
         name: selectedCourse,
-        ranking: courses.length + 1, // Assign the next ranking number
+        ranking: courses.length + 1,
       };
-      setCourses([...courses, newCourse]);
+      const updatedCourses = [...courses, newCourse];
+      setCourses(updatedCourses);
+
+      // Save the updated courses to Firebase
+      const userId = user.id;
+      const userDocRef = doc(db, 'users', userId);
+      await setDoc(userDocRef, { courses: updatedCourses }, { merge: true });
+
       setIsConfirmationOpen(false);
       setSelectedCourse('');
     }
   };
+
+  // Handle removing a course
+  const handleRemoveCourse = async () => {
+    if (courseToRemove && user) {
+      // Filter out the course to remove
+      const updatedCourses = courses.filter((course) => course.name !== courseToRemove);
+      setCourses(updatedCourses);
+
+      // Save the updated courses to Firebase
+      const userId = user.id;
+      const userDocRef = doc(db, 'users', userId);
+      await setDoc(userDocRef, { courses: updatedCourses }, { merge: true });
+
+      // Reset the course to remove
+      setCourseToRemove(null);
+    }
+  };
+
+  // Filter out already selected courses from the dropdown options
+  const availableCourses = allCourses.filter(
+    (course) => !courses.some((selectedCourse) => selectedCourse.name === course)
+  );
 
   const features = [
     {
@@ -104,10 +167,11 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
               <SelectValue placeholder="Select a course" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Mathematics">Mathematics</SelectItem>
-              <SelectItem value="Science">Science</SelectItem>
-              <SelectItem value="History">History</SelectItem>
-              <SelectItem value="Literature">Literature</SelectItem>
+              {availableCourses.map((course) => (
+                <SelectItem key={course} value={course}>
+                  {course}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button 
@@ -119,7 +183,7 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
           </Button>
         </div>
 
-        {/* Confirmation Dialog */}
+        {/* Confirmation Dialog for Adding Course */}
         <AlertDialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -135,6 +199,37 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Confirmation Dialog for Removing Course */}
+        <AlertDialog open={!!courseToRemove} onOpenChange={(open) => !open && setCourseToRemove(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Removal</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove "{courseToRemove}" from your course list?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRemoveCourse}>Remove</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Popup for No Course Selected */}
+        <AlertDialog open={showNoCoursePopup} onOpenChange={setShowNoCoursePopup}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>No Course Selected</AlertDialogTitle>
+              <AlertDialogDescription>
+                Please select at least one course before starting the quiz.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowNoCoursePopup(false)}>OK</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Course Table */}
         {courses.length > 0 && (
           <div className="w-full max-w-5xl bg-card/50 border border-border/40 rounded-lg p-8 backdrop-blur-sm mt-8">
@@ -144,6 +239,7 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
                 <TableRow>
                   <TableHead>Course Name</TableHead>
                   <TableHead>Ranking</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -151,6 +247,15 @@ const HomePage = ({ onStartQuiz, quizData }: HomePageProps) => {
                   <TableRow key={index}>
                     <TableCell>{course.name}</TableCell>
                     <TableCell>{course.ranking}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setCourseToRemove(course.name)}
+                      >
+                        Remove
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
