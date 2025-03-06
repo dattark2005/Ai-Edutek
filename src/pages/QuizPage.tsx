@@ -9,9 +9,10 @@ import { Clock, ArrowRight, ArrowLeft, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { db } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/firebase'; // Import Firebase configuration
+import { doc, setDoc } from 'firebase/firestore'; // Firestore functions
+import { collection, query, where, getDocs } from 'firebase/firestore'; // Firestore functions
+import { exportFirestoreDataToJson } from '@/lib/firebaseUtils'; // Utility function to export JSON
 
 const API_URL = 'https://quizapi.io/api/v1/questions';
 const API_KEY = 'E0ncEEJKUx9OB83tgUAWh0czgsba2QqYhaWdxJL5';
@@ -64,20 +65,25 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
         headers: { 'X-Api-Key': API_KEY },
       });
       const data: QuizQuestion[] = await response.json();
-
+  
       const formattedQuestions: FormattedQuestion[] = data.map((q) => {
         const options = Object.values(q.answers).filter((option): option is string => option !== null);
         const correctAnswerKey = q.correct_answer;
+  
+        // Find the index of the correct answer
         const correctIndex = Object.keys(q.answers).findIndex((key) => key === correctAnswerKey);
-
+  
+        // If the correct answer key is invalid, assign a random index
+        const validCorrectIndex = correctIndex !== -1 ? correctIndex : Math.floor(Math.random() * options.length);
+  
         return {
           id: q.id,
           question: q.question,
           options: options,
-          correctAnswer: correctIndex !== -1 ? correctIndex : 0, // Ensure a valid index
+          correctAnswer: validCorrectIndex, // Use the valid correct index
         };
       });
-
+  
       setQuestions(formattedQuestions);
       setAnswers(Array(formattedQuestions.length).fill(null));
     } catch (error) {
@@ -98,11 +104,11 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
 
   const handleNextQuestion = useCallback(async () => {
     if (selectedOption === null) return;
-  
+
     const newAnswers = [...answers];
     newAnswers[currentQuestion] = selectedOption;
     setAnswers(newAnswers);
-  
+
     if (currentQuestion < totalQuestions - 1) {
       setCurrentQuestion((prev) => prev + 1);
       setSelectedOption(null);
@@ -112,16 +118,28 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
       const correctAnswers = newAnswers.filter((ans, i) => ans === questions[i].correctAnswer).length;
       setScore(correctAnswers);
       setShowScorePopup(true);
-  
+
+      // Prepare quiz results
+      const quizResults = {
+        score: correctAnswers,
+        total: totalQuestions,
+        answers: newAnswers,
+        questions: questions.map((q, i) => ({
+          question: q.question,
+          correctAnswer: q.correctAnswer,
+          userAnswer: newAnswers[i],
+        })),
+      };
+
       // Call onComplete with the quiz results
-      onComplete({ score: correctAnswers, total: totalQuestions });
-  
-      // Save quiz results to Firestore
+      onComplete(quizResults);
+
+      // Save quiz results to Firebase
       try {
         const userId = user?.id; // Get the user ID from Clerk
         if (!userId) throw new Error("User not authenticated");
-  
-        const quizResults = {
+
+        const quizResultsData = {
           userId,
           score: correctAnswers,
           totalQuestions,
@@ -133,16 +151,18 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
           })),
           timestamp: new Date().toISOString(),
         };
-  
+
         // Save to Firestore
-        await setDoc(doc(db, 'quizResults', `${userId}_${Date.now()}`), quizResults);
+        await setDoc(doc(db, 'quizResults', `${userId}_${Date.now()}`), quizResultsData);
         console.log("Quiz results saved to Firestore");
+
+        // Generate a JSON file for the user
+        exportFirestoreDataToJson('quizResults', `quiz_results_${userId}`); // Export the user's quiz results
       } catch (error) {
         console.error("Error saving quiz results:", error);
       }
     }
   }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete, user]);
-
 
   const fetchQuizResults = async (userId: string) => {
     try {
