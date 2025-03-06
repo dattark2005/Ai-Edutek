@@ -49,7 +49,7 @@ function App() {
               <Routes>
                 <Route 
                   path="/" 
-                  element={<HomePage onStartQuiz={handleStartQuiz} />} 
+                  element={<HomePage onStartQuiz={handleStartQuiz} quizData={undefined} />} 
                 />
                 <Route 
                   path="/quiz" 
