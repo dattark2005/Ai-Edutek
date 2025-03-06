@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { db } from '@/firebase'; // Import Firebase configuration
 import { doc, setDoc } from 'firebase/firestore'; // Firestore functions
 import { collection, query, where, getDocs } from 'firebase/firestore'; // Firestore functions
-import { exportFirestoreDataToJson } from '@/lib/firebaseUtils'; // Utility function to export JSON
 
 const API_URL = 'https://quizapi.io/api/v1/questions';
 const API_KEY = 'E0ncEEJKUx9OB83tgUAWh0czgsba2QqYhaWdxJL5';
@@ -156,8 +155,7 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
         await setDoc(doc(db, 'quizResults', `${userId}_${Date.now()}`), quizResultsData);
         console.log("Quiz results saved to Firestore");
 
-        // Generate a JSON file for the user
-        exportFirestoreDataToJson('quizResults', `quiz_results_${userId}`); // Export the user's quiz results
+        
       } catch (error) {
         console.error("Error saving quiz results:", error);
       }
