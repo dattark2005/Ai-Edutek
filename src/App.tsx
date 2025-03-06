@@ -41,7 +41,6 @@ function App() {
         <div className="min-h-screen bg-background">
           <main className="container mx-auto px-4 py-8">
             <SignedOut>
-              {/* If user is not logged in, show SignIn page */}
               <Navigate to="/sign-in" replace />
             </SignedOut>
   

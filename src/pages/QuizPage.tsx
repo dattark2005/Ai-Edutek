@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,9 @@ import { Clock, ArrowRight, ArrowLeft, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { db } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const API_URL = 'https://quizapi.io/api/v1/questions';
 const API_KEY = 'E0ncEEJKUx9OB83tgUAWh0czgsba2QqYhaWdxJL5';
@@ -40,6 +44,7 @@ interface QuizPageProps {
 
 const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
   const navigate = useNavigate();
+  const { user } = useUser();
   const [questions, setQuestions] = useState<FormattedQuestion[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<number>(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -91,13 +96,13 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
   const totalQuestions = questions.length;
   const progress = totalQuestions > 0 ? ((currentQuestion + 1) / totalQuestions) * 100 : 0;
 
-  const handleNextQuestion = useCallback(() => {
+  const handleNextQuestion = useCallback(async () => {
     if (selectedOption === null) return;
-
+  
     const newAnswers = [...answers];
     newAnswers[currentQuestion] = selectedOption;
     setAnswers(newAnswers);
-
+  
     if (currentQuestion < totalQuestions - 1) {
       setCurrentQuestion((prev) => prev + 1);
       setSelectedOption(null);
@@ -107,11 +112,49 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
       const correctAnswers = newAnswers.filter((ans, i) => ans === questions[i].correctAnswer).length;
       setScore(correctAnswers);
       setShowScorePopup(true);
-
+  
       // Call onComplete with the quiz results
       onComplete({ score: correctAnswers, total: totalQuestions });
+  
+      // Save quiz results to Firestore
+      try {
+        const userId = user?.id; // Get the user ID from Clerk
+        if (!userId) throw new Error("User not authenticated");
+  
+        const quizResults = {
+          userId,
+          score: correctAnswers,
+          totalQuestions,
+          answers: newAnswers,
+          questions: questions.map((q, i) => ({
+            question: q.question,
+            correctAnswer: q.correctAnswer,
+            userAnswer: newAnswers[i],
+          })),
+          timestamp: new Date().toISOString(),
+        };
+  
+        // Save to Firestore
+        await setDoc(doc(db, 'quizResults', `${userId}_${Date.now()}`), quizResults);
+        console.log("Quiz results saved to Firestore");
+      } catch (error) {
+        console.error("Error saving quiz results:", error);
+      }
     }
-  }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete]);
+  }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete, user]);
+
+
+  const fetchQuizResults = async (userId: string) => {
+    try {
+      const q = query(collection(db, 'quizResults'), where('userId', '==', userId));
+      const querySnapshot = await getDocs(q);
+      const results = querySnapshot.docs.map((doc) => doc.data());
+      return results;
+    } catch (error) {
+      console.error("Error fetching quiz results:", error);
+      return [];
+    }
+  };
 
   const handlePreviousQuestion = () => {
     if (currentQuestion > 0) {
