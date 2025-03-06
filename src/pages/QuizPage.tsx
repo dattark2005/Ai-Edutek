@@ -74,17 +74,17 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
         headers: { 'X-Api-Key': API_KEY },
       });
       const data: QuizQuestion[] = await response.json();
-  
+
       const formattedQuestions: FormattedQuestion[] = data.map((q) => {
         const options = Object.values(q.answers).filter((option): option is string => option !== null);
         const correctAnswerKey = q.correct_answer;
-  
+
         // Find the index of the correct answer
         const correctIndex = Object.keys(q.answers).findIndex((key) => key === correctAnswerKey);
-  
+
         // If the correct answer key is invalid, assign a random index
         const validCorrectIndex = correctIndex !== -1 ? correctIndex : Math.floor(Math.random() * options.length);
-  
+
         return {
           id: q.id,
           question: q.question,
@@ -92,7 +92,7 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
           correctAnswer: validCorrectIndex, // Use the valid correct index
         };
       });
-  
+
       setQuestions(formattedQuestions);
       setAnswers(Array(formattedQuestions.length).fill(null));
     } catch (error) {
@@ -143,13 +143,16 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
       // Call onComplete with the quiz results
       onComplete(quizResults);
 
-      // Save quiz results to Firebase
+      // Save quiz results to Firebase with user details and course
       try {
         const userId = user?.id; // Get the user ID from Clerk
         if (!userId) throw new Error("User not authenticated");
 
         const quizResultsData = {
           userId,
+          userEmail: user?.primaryEmailAddress?.emailAddress, // Get user email
+          userName: user?.fullName, // Get user name
+          course: selectedCategory, // Store the selected course
           score: correctAnswers,
           totalQuestions,
           answers: newAnswers,
@@ -164,13 +167,13 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
         // Save to Firestore
         await setDoc(doc(db, 'quizResults', `${userId}_${Date.now()}`), quizResultsData);
         console.log("Quiz results saved to Firestore");
-
-        
       } catch (error) {
         console.error("Error saving quiz results:", error);
+      } finally {
+        setIsSubmitting(false); // Reset isSubmitting after submission
       }
     }
-  }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete, user]);
+  }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete, user, selectedCategory]);
 
   const handlePreviousQuestion = () => {
     if (currentQuestion > 0) {
@@ -274,7 +277,7 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
           <Button onClick={handlePreviousQuestion} disabled={currentQuestion === 0}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Previous
           </Button>
-          <Button onClick={handleNextQuestion} disabled={isSubmitting}>
+          <Button onClick={handleNextQuestion} disabled={isSubmitting || selectedOption === null}>
             {currentQuestion < totalQuestions - 1 ? (
               <>Next <ArrowRight className="ml-2 h-4 w-4" /></>
             ) : (
