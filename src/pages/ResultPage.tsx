@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Brain, BookOpen, BarChart, CheckCircle, XCircle, Lightbulb, Award } from 'lucide-react';
+import { Brain, BookOpen, BarChart, CheckCircle, XCircle, Lightbulb, Award, Trophy } from 'lucide-react';
 import { 
   LineChart, Line, BarChart as RechartsBarChart, Bar, XAxis, YAxis, 
   CartesianGrid, Tooltip, ResponsiveContainer, Legend 
