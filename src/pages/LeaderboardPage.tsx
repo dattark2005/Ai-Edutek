@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Trophy, Medal, Search, Users, Calendar, ArrowUpDown } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { Trophy, Medal, Search, ArrowUpDown } from 'lucide-react';
 import { db } from '@/firebase'; // Import Firebase configuration
-import { collection, getDocs, query, where } from 'firebase/firestore'; // Firestore functions
+import { collection, getDocs } from 'firebase/firestore'; // Firestore functions
 
 interface QuizResult {
   userId: string;
@@ -32,7 +29,9 @@ const LeaderboardPage = () => {
   const [leaderboardData, setLeaderboardData] = useState<{ [course: string]: LeaderboardEntry[] }>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('averageScore');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch quiz results and generate leaderboard
   useEffect(() => {
@@ -85,6 +84,9 @@ const LeaderboardPage = () => {
         setLeaderboardData(leaderboard);
       } catch (error) {
         console.error('Error fetching quiz results:', error);
+        setError('Failed to fetch leaderboard data. Please try again later.');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -102,22 +104,56 @@ const LeaderboardPage = () => {
   };
 
   // Filter leaderboard data based on search query
-  const filteredData = (course: string) => {
-    return leaderboardData[course]?.filter((entry) =>
-      entry.userName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  };
+  const filteredData = useMemo(() => {
+    return (course: string) => {
+      const data = leaderboardData[course];
+      if (!data) return [];
+  
+      return data.filter((entry) =>
+        (entry.userName || '').toLowerCase().includes((searchQuery || '').toLowerCase())
+      );
+    };
+  }, [leaderboardData, searchQuery]);
 
   // Sort leaderboard data
-  const sortedData = (course: string) => {
-    const data = filteredData(course);
-    if (!data) return [];
+  const sortedData = useMemo(() => {
+    return (course: string) => {
+      const data = filteredData(course);
+      if (!data) return [];
 
-    return [...data].sort((a, b) => {
-      const factor = sortDirection === 'desc' ? -1 : 1;
-      return factor * (a[sortBy as keyof typeof a] as number - (b[sortBy as keyof typeof b] as number));
-    });
-  };
+      return [...data].sort((a, b) => {
+        const factor = sortDirection === 'desc' ? -1 : 1;
+        return factor * (a[sortBy as keyof typeof a] as number - (b[sortBy as keyof typeof b] as number));
+      });
+    };
+  }, [filteredData, sortBy, sortDirection]);
+
+  // Render loading state
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <p>Loading leaderboard...</p>
+      </div>
+    );
+  }
+
+  // Render error state
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  // Render empty state
+  if (Object.keys(leaderboardData).length === 0) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <p>No leaderboard data available.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto py-8">
@@ -187,52 +223,7 @@ const LeaderboardPage = () => {
 
                   <div className="divide-y">
                     {sortedData(course).map((entry, index) => (
-                      <div
-                        key={entry.userId}
-                        className={`grid grid-cols-12 gap-2 p-4 items-center transition-all duration-300 ${
-                          entry.userName === 'You' ? 'bg-primary/5' : ''
-                        }`}
-                      >
-                        <div className="col-span-1 flex justify-center">
-                          {index < 3 ? (
-                            <div className={`
-                              flex items-center justify-center w-8 h-8 rounded-full
-                              ${index === 0 ? 'bg-yellow-500/20 text-yellow-500' : 
-                                index === 1 ? 'bg-gray-300/20 text-gray-500' : 
-                                'bg-amber-600/20 text-amber-600'}
-                            `}>
-                              <Medal className="h-4 w-4" />
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground">
-                              {index + 1}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="col-span-5 flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full overflow-hidden bg-muted">
-                            {/* Placeholder for user avatar */}
-                          </div>
-                          <div>
-                            <p className={`font-medium ${entry.userName === 'You' ? 'text-primary' : ''}`}>
-                              {entry.userName}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="col-span-2 font-semibold">
-                          {entry.averageScore.toFixed(2)}%
-                        </div>
-
-                        <div className="col-span-2">
-                          {entry.totalQuizzes}
-                        </div>
-
-                        <div className="col-span-2 text-sm text-muted-foreground">
-                          {entry.userEmail}
-                        </div>
-                      </div>
+                      <LeaderboardRow key={entry.userId} entry={entry} index={index} />
                     ))}
                   </div>
                 </div>
@@ -241,6 +232,57 @@ const LeaderboardPage = () => {
           </TabsContent>
         ))}
       </Tabs>
+    </div>
+  );
+};
+
+// Reusable component for leaderboard row
+const LeaderboardRow = ({ entry, index }: { entry: LeaderboardEntry; index: number }) => {
+  return (
+    <div
+      className={`grid grid-cols-12 gap-2 p-4 items-center transition-all duration-300 ${
+        entry.userName === 'You' ? 'bg-primary/5' : ''
+      }`}
+    >
+      <div className="col-span-1 flex justify-center">
+        {index < 3 ? (
+          <div className={`
+            flex items-center justify-center w-8 h-8 rounded-full
+            ${index === 0 ? 'bg-yellow-500/20 text-yellow-500' : 
+              index === 1 ? 'bg-gray-300/20 text-gray-500' : 
+              'bg-amber-600/20 text-amber-600'}
+          `}>
+            <Medal className="h-4 w-4" />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground">
+            {index + 1}
+          </div>
+        )}
+      </div>
+
+      <div className="col-span-5 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-full overflow-hidden bg-muted">
+          {/* Placeholder for user avatar */}
+        </div>
+        <div>
+          <p className={`font-medium ${entry.userName === 'You' ? 'text-primary' : ''}`}>
+            {entry.userName}
+          </p>
+        </div>
+      </div>
+
+      <div className="col-span-2 font-semibold">
+        {entry.averageScore.toFixed(2)}%
+      </div>
+
+      <div className="col-span-2">
+        {entry.totalQuizzes}
+      </div>
+
+      <div className="col-span-2 text-sm text-muted-foreground">
+        {entry.userEmail}
+      </div>
     </div>
   );
 };
