@@ -6,7 +6,6 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { Brain, Trophy, BookOpen, Settings } from 'lucide-react';
 import { SignOutButton, useUser } from "@clerk/clerk-react";
 
-
 const Navbar = () => {
   const location = useLocation();
   const { user } = useUser();
@@ -21,10 +20,12 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Navbar items with paths and icons
   const navItems = [
     { name: 'Home', path: '/', icon: <Brain className="h-4 w-4 mr-2" /> },
     { name: 'Leaderboard', path: '/leaderboard', icon: <Trophy className="h-4 w-4 mr-2" /> },
-    { name: 'Study Plan', path: '/results', icon: <BookOpen className="h-4 w-4 mr-2" /> },
+    { name: 'Study Plan', path: '/study-plan', icon: <BookOpen className="h-4 w-4 mr-2" /> },
+    { name: 'Assignment Upload', path: '/assignment-upload', icon: <BookOpen className="h-4 w-4 mr-2" /> }, // Added Assignment Upload link
     { name: 'Settings', path: '/settings', icon: <Settings className="h-4 w-4 mr-2" /> },
   ];
 
@@ -34,11 +35,13 @@ const Navbar = () => {
       scrolled ? "bg-background/80 backdrop-blur-md border-b" : "bg-transparent"
     )}>
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
+        {/* Logo Section */}
         <div className="flex items-center gap-2">
           <Brain className="h-6 w-6" />
           <span className="font-bold text-xl">LearnAI</span>
         </div>
-        
+
+        {/* Navigation Links */}
         <nav className="hidden md:flex items-center space-x-1">
           {navItems.map((item) => (
             <Button
@@ -54,16 +57,22 @@ const Navbar = () => {
             </Button>
           ))}
         </nav>
-        
-        {user && (  // Show logout only when user is signed in
-        <SignOutButton>
-          <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
-            Logout
-          </button>
-        </SignOutButton>
-      )}
+
+        {/* User Actions */}
         <div className="flex items-center gap-2">
+          {/* Logout Button (Visible only when user is signed in) */}
+          {user && (
+            <SignOutButton>
+              <Button variant="destructive" size="sm">
+                Logout
+              </Button>
+            </SignOutButton>
+          )}
+
+          {/* Theme Toggle */}
           <ModeToggle />
+
+          {/* Mobile Menu Button (Hidden on larger screens) */}
           <Button variant="outline" size="sm" className="md:hidden">
             Menu
           </Button>
