@@ -58,16 +58,12 @@ function App() {
                 <Route
                   path="/results"
                   element={
-                    quizCompleted ? (
-                      <ResultPage results={quizResults} />
-                    ) : (
-                      <Navigate to="/" replace />
-                    )
+                    <ResultPage results={quizResults} />
                   }
                 />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/study-plan" element={<StudyPlanPage studyPlan={[]} resources={[]} />} /> {/* New route for Study Plan Page */}
+                <Route path="/results" element={<StudyPlanPage course="exampleCourse" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </SignedIn>

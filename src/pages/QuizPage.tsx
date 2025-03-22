@@ -11,9 +11,14 @@ import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/firebase'; // Import Firebase configuration
 import { doc, setDoc, getDoc } from 'firebase/firestore'; // Firestore functions
+import { GoogleGenerativeAI } from '@google/generative-ai'; // Gemini API
 
 const API_URL = 'https://quizapi.io/api/v1/questions';
 const API_KEY = 'E0ncEEJKUx9OB83tgUAWh0czgsba2QqYhaWdxJL5';
+
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI('AIzaSyCuxRmtNmdcEAZSL9QTjk5a_pIuAokf5J0');
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
 interface QuizQuestion {
   id: number;
@@ -70,7 +75,7 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
   // Fetch quiz questions based on the selected category
   const fetchQuiz = async (category: string) => {
     try {
-      const response = await fetch(`${API_URL}?category=${category}&limit=15`, {
+      const response = await fetch(`${API_URL}?category=${category}&limit=10`, {
         headers: { 'X-Api-Key': API_KEY },
       });
       const data: QuizQuestion[] = await response.json();
@@ -97,6 +102,119 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
       setAnswers(Array(formattedQuestions.length).fill(null));
     } catch (error) {
       console.error("Error fetching quiz:", error);
+    }
+  };
+
+  // Generate study plan using Gemini API
+  const generateStudyPlanWithGemini = async (quizResults: any) => {
+    console.log("Generating study plan with Gemini...");
+    console.log("Quiz Results:", quizResults);
+  
+  const prompt = `
+  You are an AI tutor. Based on the following quiz results, generate a personalized study plan for the user. The study plan should include:
+
+  1. **Courses**: A list of courses the user is studying.
+  2. **Focus Areas**: For each course, identify the key topics or skills the user needs to improve.
+  3. **Recommendations**: Provide actionable steps and resources to help the user improve in each focus area.
+  4. **Daily Study Schedule**: For each course, create a 7-day study plan with daily tasks and time allocations.
+  5. **Resources**: Provide links to high-quality resources (e.g., articles, videos, tutorials) for each focus area.
+
+  Quiz Results:
+  - Score: ${quizResults.score}/${quizResults.totalQuestions}
+  - Course: ${quizResults.course}
+  - Incorrect Answers:
+    ${quizResults.Answers.map(
+      (answer: any, index: number) => `
+    ${index + 1}. Question: "${answer.question}"
+       User Answer: "${answer.userAnswer}"
+       Correct Answer: "${answer.correctAnswer}"`
+    ).join('\n')}
+
+  Provide the study plan in the following JSON format:
+  {
+    "courses": [
+      {
+        "course": "Course Name",
+        "focusAreas": [
+          {
+            "category": "Topic or Skill Name",
+            "strength": "Percentage of correct answers in this category",
+            "weakness": "Percentage of incorrect answers in this category"
+          }
+        ],
+        "recommendations": [
+          "Actionable step 1",
+          "Actionable step 2",
+          "Actionable step 3"
+        ],
+        "dailySchedule": [
+          {
+            "day": "Day 1",
+            "tasks": [
+              {
+                "title": "Task Title",
+                "duration": "Duration in minutes",
+                "priority": "High/Medium/Low"
+              }
+            ]
+          }
+        ],
+        "resources": [
+          {
+            "category": "Topic or Skill Name",
+            "links": [
+              {
+                "title": "Resource Title",
+                "url": "https://example.com"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+`;
+  
+    console.log("Prompt sent to Gemini:", prompt);
+  
+    try {
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const studyPlanText = response.text();
+  
+      console.log("Raw study plan response from Gemini:", studyPlanText);
+  
+      // Clean the response by removing Markdown syntax
+      const cleanedStudyPlanText = studyPlanText.replace(/```json/g, '').replace(/```/g, '').trim();
+  
+      console.log("Cleaned study plan response:", cleanedStudyPlanText);
+  
+      // Parse the JSON response
+      try {
+        const parsedStudyPlan = JSON.parse(cleanedStudyPlanText);
+        console.log("Parsed study plan:", parsedStudyPlan);
+        return parsedStudyPlan;
+      } catch (error) {
+        console.error("Error parsing study plan:", error);
+        return null;
+      }
+    } catch (error) {
+      console.error("Error generating study plan with Gemini:", error);
+      return null;
+    }
+  };
+
+  // Save study plan to Firebase
+  const saveStudyPlan = async (userId: string, studyPlan: any) => {
+    try {
+      console.log("Saving study plan to Firebase:", studyPlan);
+      await setDoc(doc(db, 'studyPlans', userId), {
+        ...studyPlan, // Save the entire study plan object
+        timestamp: new Date().toISOString(),
+      });
+      console.log('Study plan saved to Firebase');
+    } catch (error) {
+      console.error('Error saving study plan:', error);
     }
   };
 
@@ -130,47 +248,40 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
 
       // Prepare quiz results
       const quizResults = {
+        userId: user?.id || null,
         score: correctAnswers,
-        total: totalQuestions,
-        answers: newAnswers,
-        questions: questions.map((q, i) => ({
+        totalQuestions: totalQuestions,
+        course: selectedCategory,
+        Answers: questions.map((q, i) => ({
           question: q.question,
-          correctAnswer: q.correctAnswer,
-          userAnswer: newAnswers[i],
+          userAnswer: newAnswers[i] !== null ? q.options[newAnswers[i]] : "No answer",
+          correctAnswer: q.options[q.correctAnswer],
         })),
       };
 
       // Call onComplete with the quiz results
       onComplete(quizResults);
 
-      // Save quiz results to Firebase with user details and course
+      // Save quiz results to Firebase
       try {
-        const userId = user?.id; // Get the user ID from Clerk
+        const userId = user?.id;
         if (!userId) throw new Error("User not authenticated");
 
         const quizResultsData = {
-          userId,
-          userEmail: user?.primaryEmailAddress?.emailAddress, // Get user email
-          userName: user?.fullName, // Get user name
-          course: selectedCategory, // Store the selected course
-          score: correctAnswers,
-          totalQuestions,
-          answers: newAnswers,
-          questions: questions.map((q, i) => ({
-            question: q.question,
-            correctAnswer: q.correctAnswer,
-            userAnswer: newAnswers[i],
-          })),
+          ...quizResults,
           timestamp: new Date().toISOString(),
         };
 
-        // Save to Firestore
         await setDoc(doc(db, 'quizResults', `${userId}_${Date.now()}`), quizResultsData);
         console.log("Quiz results saved to Firestore");
+
+        // Generate and save study plan
+        const studyPlan = await generateStudyPlanWithGemini(quizResults);
+        await saveStudyPlan(userId, studyPlan);
       } catch (error) {
-        console.error("Error saving quiz results:", error);
+        console.error("Error saving quiz results or study plan:", error);
       } finally {
-        setIsSubmitting(false); // Reset isSubmitting after submission
+        setIsSubmitting(false);
       }
     }
   }, [currentQuestion, selectedOption, answers, totalQuestions, questions, onComplete, user, selectedCategory]);
@@ -333,4 +444,5 @@ const QuizPage: React.FC<QuizPageProps> = ({ onComplete }) => {
     </div>
   );
 };
+
 export default QuizPage;
