@@ -10,6 +10,7 @@ import LeaderboardPage from '@/pages/LeaderboardPage';
 import SettingsPage from '@/pages/SettingsPage';
 import StudyPlanPage from '@/pages/StudyPlanPage'; // Import the new StudyPlanPage
 import { ClerkProvider, SignIn, SignUp, SignedIn, SignedOut } from '@clerk/clerk-react';
+import AssignmentUpload from './pages/AssignmentUpload';
 
 // const clerkFrontendApi = import.meta.env.CLERK_PUBLISHABLE_KEY || '';
 const clerkFrontendApi = "pk_test_aW5ub2NlbnQtZm94aG91bmQtMTMuY2xlcmsuYWNjb3VudHMuZGV2JA";
@@ -62,6 +63,7 @@ function App() {
                   }
                 />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/assignment-upload" element={<AssignmentUpload />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/results" element={<StudyPlanPage course="exampleCourse" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
